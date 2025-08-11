@@ -4,10 +4,10 @@ import {
   Text,
   TextInput,
   StyleSheet,
-  ScrollView,
   Pressable,
   Alert,
-  RefreshControl,
+  FlatList,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -33,7 +33,16 @@ export default function HistoryScreen({
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [selectedEntry, setSelectedEntry] = useState<Entry | null>(null);
 
-  // Group entries by day
+  // Simple, safe refresh handler
+  const handleRefresh = async () => {
+    try {
+      await onRefresh();
+    } catch (error) {
+      console.log('Refresh error:', error);
+    }
+  };
+
+  // Group entries by day - simplified
   const groupedEntries = useMemo(() => {
     const filtered = entries.filter(entry =>
       entry.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -56,7 +65,6 @@ export default function HistoryScreen({
       return acc;
     }, {} as { [key: string]: { date: Date; entries: Entry[] } });
 
-    // Sort by date (newest first) and sort entries within each day
     return Object.values(grouped)
       .sort((a, b) => b.date.getTime() - a.date.getTime())
       .map(day => ({
@@ -81,6 +89,107 @@ export default function HistoryScreen({
 
   const closeEntryDetail = () => {
     setSelectedEntry(null);
+  };
+
+  const renderDay = ({ item }: { item: any }) => {
+    const dayKey = item.date.toDateString();
+    const isExpanded = expandedDays.has(dayKey);
+    const averageMood = item.entries
+      .filter((e: Entry) => e.manualMood)
+      .reduce((sum: number, e: Entry, _, arr: Entry[]) => sum + (e.manualMood! / arr.length), 0);
+    
+    return (
+      <View style={styles.dayContainer}>
+        {/* Day Header */}
+        <Pressable 
+          style={styles.dayHeader} 
+          onPress={() => toggleDay(dayKey)}
+        >
+          <View style={styles.dayInfo}>
+            <Text style={styles.dayDate}>
+              {item.date.toLocaleDateString('en-US', {
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric',
+                year: item.date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+              })}
+            </Text>
+            <View style={styles.dayMeta}>
+              <Text style={styles.entryCount}>
+                {item.entries.length} {item.entries.length === 1 ? 'entry' : 'entries'}
+              </Text>
+              {averageMood > 0 && (
+                <Text style={styles.dayMood}>
+                  {getMoodEmoji(Math.round(averageMood))} {averageMood.toFixed(1)}
+                </Text>
+              )}
+            </View>
+          </View>
+          <Ionicons 
+            name={isExpanded ? "chevron-up" : "chevron-down"} 
+            size={20} 
+            color="#666" 
+          />
+        </Pressable>
+
+        {/* Day Entries (Expanded) */}
+        {isExpanded && (
+          <View style={styles.dayEntries}>
+            {item.entries.map((entry: Entry) => (
+              <Pressable
+                key={entry.id}
+                style={styles.entryItem}
+                onPress={() => openEntryDetail(entry)}
+              >
+                <View style={styles.entryItemHeader}>
+                  <Text style={styles.entryItemTitle} numberOfLines={1}>
+                    {entry.title || 'Untitled Entry'}
+                  </Text>
+                  <Text style={styles.entryItemTime}>
+                    {new Date(entry.date).toLocaleTimeString('en-US', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </Text>
+                </View>
+                <Text style={styles.entryItemPreview} numberOfLines={2}>
+                  {entry.text}
+                </Text>
+                <View style={styles.entryItemMeta}>
+                  {entry.manualMood && (
+                    <Text style={styles.entryItemMood}>
+                      {getMoodEmoji(entry.manualMood)} {entry.manualMood}/5
+                    </Text>
+                  )}
+                  <View style={styles.entryItemIndicators}>
+                    {entry.transcribed && (
+                      <View style={styles.microIndicator}>
+                        <Ionicons name="mic" size={8} color="#fff" />
+                      </View>
+                    )}
+                    {entry.hasPhoto && (
+                      <View style={styles.photoIndicatorSmall}>
+                        <Ionicons name="camera" size={8} color="#fff" />
+                      </View>
+                    )}
+                    {entry.aiAnalyzed && (
+                      <View style={styles.aiIndicatorSmall}>
+                        <Ionicons name="sparkles" size={8} color="#fff" />
+                      </View>
+                    )}
+                    {entry.tags.includes('dummy') && (
+                      <View style={styles.testIndicatorSmall}>
+                        <Ionicons name="code" size={8} color="#fff" />
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </View>
+    );
   };
 
   const confirmDeleteEntry = (id: string) => {
@@ -205,12 +314,13 @@ export default function HistoryScreen({
       </View>
 
       {/* Entries by Day */}
-      <ScrollView 
-        style={styles.scrollView}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      <FlatList
+        style={styles.flatList}
+        data={groupedEntries}
+        renderItem={renderDay}
+        keyExtractor={(item) => item.date.toDateString()}
         showsVerticalScrollIndicator={false}
-      >
-        {groupedEntries.length === 0 ? (
+        ListEmptyComponent={() => (
           <View style={styles.emptyState}>
             {searchQuery ? (
               <>
@@ -224,112 +334,9 @@ export default function HistoryScreen({
               </>
             )}
           </View>
-        ) : (
-          groupedEntries.map((day) => {
-            const dayKey = day.date.toDateString();
-            const isExpanded = expandedDays.has(dayKey);
-            const averageMood = day.entries
-              .filter(e => e.manualMood)
-              .reduce((sum, e, _, arr) => sum + (e.manualMood! / arr.length), 0);
-            
-            return (
-              <View key={dayKey} style={styles.dayContainer}>
-                {/* Day Header */}
-                <Pressable 
-                  style={styles.dayHeader} 
-                  onPress={() => toggleDay(dayKey)}
-                >
-                  <View style={styles.dayInfo}>
-                    <Text style={styles.dayDate}>
-                      {day.date.toLocaleDateString('en-US', {
-                        weekday: 'long',
-                        month: 'long',
-                        day: 'numeric',
-                        year: day.date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
-                      })}
-                    </Text>
-                    <View style={styles.dayMeta}>
-                      <Text style={styles.entryCount}>
-                        {day.entries.length} {day.entries.length === 1 ? 'entry' : 'entries'}
-                      </Text>
-                      {averageMood > 0 && (
-                        <Text style={styles.dayMood}>
-                          {getMoodEmoji(Math.round(averageMood))} {averageMood.toFixed(1)}
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-                  <Ionicons 
-                    name={isExpanded ? "chevron-up" : "chevron-down"} 
-                    size={20} 
-                    color="#666" 
-                  />
-                </Pressable>
-
-                {/* Day Entries (Expanded) */}
-                {isExpanded && (
-                  <View style={styles.dayEntries}>
-                    {day.entries.map((entry) => (
-                      <Pressable
-                        key={entry.id}
-                        style={styles.entryItem}
-                        onPress={() => openEntryDetail(entry)}
-                      >
-                        <View style={styles.entryItemHeader}>
-                          <Text style={styles.entryItemTitle} numberOfLines={1}>
-                            {entry.title || 'Untitled Entry'}
-                          </Text>
-                          <Text style={styles.entryItemTime}>
-                            {new Date(entry.date).toLocaleTimeString('en-US', {
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </Text>
-                        </View>
-                        <Text style={styles.entryItemPreview} numberOfLines={2}>
-                          {entry.text}
-                        </Text>
-                        <View style={styles.entryItemMeta}>
-                          {entry.manualMood && (
-                            <Text style={styles.entryItemMood}>
-                              {getMoodEmoji(entry.manualMood)} {entry.manualMood}/5
-                            </Text>
-                          )}
-                          <View style={styles.entryItemIndicators}>
-                            {entry.transcribed && (
-                              <View style={styles.microIndicator}>
-                                <Ionicons name="mic" size={8} color="#fff" />
-                              </View>
-                            )}
-                            {entry.hasPhoto && (
-                              <View style={styles.photoIndicatorSmall}>
-                                <Ionicons name="camera" size={8} color="#fff" />
-                              </View>
-                            )}
-                            {entry.aiAnalyzed && (
-                              <View style={styles.aiIndicatorSmall}>
-                                <Ionicons name="sparkles" size={8} color="#fff" />
-                              </View>
-                            )}
-                            {entry.tags.includes('dummy') && (
-                              <View style={styles.testIndicatorSmall}>
-                                <Ionicons name="code" size={8} color="#fff" />
-                              </View>
-                            )}
-                          </View>
-                        </View>
-                      </Pressable>
-                    ))}
-                  </View>
-                )}
-              </View>
-            );
-          })
         )}
-        
-        {/* Bottom padding for tab bar */}
-        <View style={styles.bottomPadding} />
-      </ScrollView>
+        contentContainerStyle={groupedEntries.length === 0 ? styles.emptyContainer : styles.listContainer}
+      />
 
       {/* Entry Detail Modal */}
       {selectedEntry && (
@@ -505,9 +512,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
   },
-  scrollView: {
+  flatList: {
     flex: 1,
     paddingHorizontal: 20,
+  },
+  listContainer: {
+    paddingBottom: 30,
+  },
+  emptyContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   
   // Day-by-day view styles

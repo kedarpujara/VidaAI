@@ -145,11 +145,20 @@ export default function App() {
     }
   };
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    await loadEntries();
-    setRefreshing(false);
-  };
+  const handleRefresh = React.useCallback(async () => {
+    if (refreshing) return; // Prevent multiple concurrent refreshes
+    
+    try {
+      setRefreshing(true);
+      // Simple reload without complex timing
+      await loadEntries();
+    } catch (error) {
+      console.error('Refresh failed:', error);
+    } finally {
+      // Ensure we always clear the refreshing state
+      setTimeout(() => setRefreshing(false), 100);
+    }
+  }, [refreshing]);
 
   const handleBulkEntriesAdded = async (newEntries: Entry[]) => {
     try {
