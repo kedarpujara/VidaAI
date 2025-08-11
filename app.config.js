@@ -16,7 +16,7 @@ export default {
         permissions: ["RECORD_AUDIO", "INTERNET"]
       },
       extra: {
-        openaiApiKey: "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" // Replace with your actual API key
+        openaiApiKey: "to_add_here" // Replace with your actual API key
       }
     }
   };
