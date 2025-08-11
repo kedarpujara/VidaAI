@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { addEntry as addStoreEntry, loadEntries, deleteEntry as del, search as query, clearAll } from '../services/storage';
-import { Entry } from '../types/journalEntry';
+import { Entry } from '../types/journal';
 
 type Ctx = {
   entries: Entry[];

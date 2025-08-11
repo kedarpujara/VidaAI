@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Entry } from '../types/journalEntry';
+import { Entry } from '../types/journal';
 import { encryptString, decryptString } from './encryption';
 
 const KEY = 'vida.entries.v1';

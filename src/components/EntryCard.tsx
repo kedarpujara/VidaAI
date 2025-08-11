@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Entry } from '../types/journalEntry';
+import { Entry } from '../types/journal';
 import { theme } from '../constants/theme';
 
 interface EntryCardProps {
