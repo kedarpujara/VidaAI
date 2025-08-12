@@ -90,6 +90,17 @@ export default function AnalyticsScreen({ entries }: AnalyticsScreenProps) {
       .slice(0, 5)
       .map(([theme, count]) => ({ theme, count }));
 
+    // Activity analysis
+    const allActivities = entries.flatMap(entry => entry.activities || []);
+    const activityCount = allActivities.reduce((acc, activity) => {
+      acc[activity] = (acc[activity] || 0) + 1;
+      return acc;
+    }, {} as { [key: string]: number });
+    
+    const topActivities = Object.entries(activityCount)
+      .sort(([,a], [,b]) => b - a)
+      .map(([activity, count]) => ({ activity, count }));
+
     // Word count analysis
     const totalWords = entries.reduce((sum, entry) => {
       return sum + (entry.text?.split(/\s+/).length || 0);
@@ -137,6 +148,7 @@ export default function AnalyticsScreen({ entries }: AnalyticsScreenProps) {
       moodTrend,
       weekdayMoods: weekdayAverages,
       topThemes,
+      topActivities,
       totalWords,
       averageWordsPerEntry,
       bestDay,
@@ -229,6 +241,33 @@ export default function AnalyticsScreen({ entries }: AnalyticsScreenProps) {
           ))}
         </View>
       </View>
+
+      {/* Top Activities */}
+      {analytics.topActivities.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>🏃‍♂️ Activity Summary</Text>
+          <View style={styles.activitiesGrid}>
+            {analytics.topActivities.map((activity, index) => {
+              const getActivityIcon = (name: string) => {
+                switch (name) {
+                  case 'social': return '👥';
+                  case 'exercise': return '🏃‍♂️';
+                  case 'nature': return '🌳';
+                  default: return '📝';
+                }
+              };
+              
+              return (
+                <View key={activity.activity} style={styles.activityCard}>
+                  <Text style={styles.activityIcon}>{getActivityIcon(activity.activity)}</Text>
+                  <Text style={styles.activityName}>{activity.activity}</Text>
+                  <Text style={styles.activityCount}>{activity.count} times</Text>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      )}
 
       {/* Top Themes */}
       {analytics.topThemes.length > 0 && (

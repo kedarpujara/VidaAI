@@ -5,6 +5,10 @@ export default {
         version: "1.0.0",
         orientation: "portrait",
         platforms: ["ios", "android"],
+        plugins: [
+            "expo-audio",
+            "expo-video"
+        ],
         ios: {
             bundleIdentifier: "com.yourcompany.vida",
             infoPlist: {

@@ -9,7 +9,7 @@ import * as FileSystem from 'expo-file-system';
 import { Buffer } from 'buffer';
 
 // Import screens
-import JournalScreen from './src/screens/JournalScreen';
+import CreateJournalEntryScreen from './src/screens/CreateJournalEntryScreen'; // New Apple-inspired screen
 import HistoryScreen from './src/screens/HistoryScreen';
 import AnalyticsScreen from './src/screens/AnalyticsScreen';
 
@@ -160,16 +160,6 @@ export default function App() {
     }
   }, [refreshing]);
 
-  const handleBulkEntriesAdded = async (newEntries: Entry[]) => {
-    try {
-      const updatedEntries = [...newEntries, ...entries];
-      await saveEntries(updatedEntries);
-      setEntries(updatedEntries);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to save entries.');
-    }
-  };
-
   const handleRemoveDummyData = async () => {
     try {
       const filteredEntries = entries.filter(entry => !entry.tags.includes('dummy'));
@@ -254,10 +244,9 @@ export default function App() {
             }}
           >
             {() => (
-              <JournalScreen 
+              <CreateJournalEntryScreen 
                 onEntryAdded={handleEntryAdded} 
-                onBulkEntriesAdded={handleBulkEntriesAdded}
-                onRemoveDummyData={handleRemoveDummyData} 
+                onRemoveDummyData={handleRemoveDummyData}
               />
             )}
           </Tab.Screen>

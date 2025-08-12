@@ -13,6 +13,9 @@ export interface Entry {
   photoUri?: string;
   hasPhoto?: boolean;
   
+  // Activity tracking (for new screen)
+  activities?: string[]; // ['social', 'exercise', 'nature']
+  
   // AI Analysis results
   aiAnalyzed?: boolean;
   mood?: {
