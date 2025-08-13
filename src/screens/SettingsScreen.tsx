@@ -1,117 +1,540 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, Linking } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  SafeAreaView,
+  Switch,
+  Alert,
+  Linking,
+  Share,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useJournal } from '../context/JournalContext';
-import Button from '../components/Button';
-import { theme } from '../constants/theme';
+import { useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export default function SettingsScreen() {
-  const { entries, clearAllData } = useJournal();
+interface SettingsScreenProps {
+  // These would be passed from parent component
+  appState?: {
+    analysisEnabled: boolean;
+    showDummyData: boolean;
+    swipeGesturesEnabled: boolean;
+  };
+  onToggleAnalysis?: () => void;
+  onToggleDummyData?: () => void;
+  onToggleSwipeGestures?: () => void;
+}
+
+const SettingsScreen = ({ 
+  appState = {
+    analysisEnabled: true,
+    showDummyData: false,
+    swipeGesturesEnabled: true,
+  },
+  onToggleAnalysis,
+  onToggleDummyData,
+  onToggleSwipeGestures,
+}: SettingsScreenProps) => {
+  const navigation = useNavigation();
+  const [localSettings, setLocalSettings] = useState({
+    notifications: true,
+    backupEnabled: false,
+    darkMode: false,
+    analytics: true,
+  });
+
+  const handleToggle = (setting: keyof typeof localSettings) => {
+    setLocalSettings(prev => ({
+      ...prev,
+      [setting]: !prev[setting],
+    }));
+    // Save to AsyncStorage
+    saveSettingToStorage(setting, !localSettings[setting]);
+  };
+
+  const saveSettingToStorage = async (key: string, value: boolean) => {
+    try {
+      await AsyncStorage.setItem(`@setting_${key}`, JSON.stringify(value));
+    } catch (error) {
+      console.error('Failed to save setting:', error);
+    }
+  };
+
+  const handleExportData = async () => {
+    Alert.alert(
+      'Export Journal Data',
+      'Export your journal entries as a JSON file?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Export', 
+          onPress: async () => {
+            try {
+              const entries = await AsyncStorage.getItem('@journal_entries');
+              if (entries) {
+                await Share.share({
+                  message: entries,
+                  title: 'Journal Export',
+                });
+              } else {
+                Alert.alert('No Data', 'No journal entries found to export.');
+              }
+            } catch (error) {
+              Alert.alert('Export Failed', 'Unable to export data.');
+            }
+          }
+        },
+      ]
+    );
+  };
 
   const handleClearData = () => {
-    Alert.alert('Clear All Data', `This will permanently delete all ${entries.length} journal entries and cannot be undone.`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete Everything', style: 'destructive', onPress: async () => { await clearAllData(); Alert.alert('Data Cleared', 'All your data has been permanently deleted.'); } }
-    ]);
+    Alert.alert(
+      'Clear All Data',
+      'This will permanently delete all your journal entries and settings. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete All', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await AsyncStorage.multiRemove([
+                '@journal_entries',
+                '@app_state',
+                '@setting_notifications',
+                '@setting_backupEnabled',
+                '@setting_darkMode',
+                '@setting_analytics',
+              ]);
+              Alert.alert('Success', 'All data has been cleared.');
+              navigation.goBack();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to clear data.');
+            }
+          }
+        },
+      ]
+    );
   };
 
-  const handlePrivacyPolicy = () => {
-    Alert.alert('Privacy Policy', 'Vida Journal keeps all your data encrypted and stored only on your device. We never access, store, or share your personal journal entries.', [{ text: 'OK' }]);
+  const openPrivacyPolicy = () => {
+    Linking.openURL('https://yourapp.com/privacy-policy');
   };
 
-  const handleSupport = () => {
-    Alert.alert('Support & Feedback', 'Thank you for using Vida Journal! For support or feedback, please email us.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Send Email', onPress: () => Linking.openURL('mailto:support@vida-journal.com?subject=Vida Journal Support') }
-    ]);
+  const openTermsOfService = () => {
+    Linking.openURL('https://yourapp.com/terms-of-service');
   };
 
-  const SettingItem = ({ icon, title, subtitle, onPress, variant = 'default' }: {
-    icon: keyof typeof Ionicons.glyphMap;
+  const handleContactSupport = () => {
+    Linking.openURL('mailto:support@yourapp.com?subject=Journal App Support');
+  };
+
+  const SettingSection = ({ 
+    title, 
+    children 
+  }: { 
+    title: string; 
+    children: React.ReactNode; 
+  }) => (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={styles.sectionContent}>
+        {children}
+      </View>
+    </View>
+  );
+
+  const SettingRow = ({ 
+    icon, 
+    title, 
+    subtitle, 
+    value, 
+    onPress, 
+    showSwitch = false,
+    switchValue = false,
+    onSwitchChange,
+    rightElement,
+  }: {
+    icon: string;
     title: string;
     subtitle?: string;
+    value?: string;
     onPress?: () => void;
-    variant?: 'default' | 'danger';
+    showSwitch?: boolean;
+    switchValue?: boolean;
+    onSwitchChange?: (value: boolean) => void;
+    rightElement?: React.ReactNode;
   }) => (
-    <Button title="" variant="ghost" onPress={onPress} style={[styles.settingItem, variant === 'danger' && styles.dangerItem]}>
-      <View style={styles.settingContent}>
-        <View style={styles.settingLeft}>
-          <Ionicons name={icon} size={24} color={variant === 'danger' ? theme.colors.danger : theme.colors.primary} />
-          <View style={styles.settingText}>
-            <Text style={[styles.settingTitle, variant === 'danger' && styles.dangerText]}>{title}</Text>
-            {subtitle && (<Text style={styles.settingSubtitle}>{subtitle}</Text>)}
-          </View>
+    <TouchableOpacity 
+      style={styles.settingRow} 
+      onPress={onPress}
+      disabled={showSwitch}
+      activeOpacity={0.7}
+    >
+      <View style={styles.settingLeft}>
+        <View style={styles.settingIcon}>
+          <Ionicons name={icon as any} size={20} color="#667eea" />
         </View>
-        <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
+        <View style={styles.settingText}>
+          <Text style={styles.settingTitle}>{title}</Text>
+          {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
+        </View>
       </View>
-    </Button>
+      
+      <View style={styles.settingRight}>
+        {showSwitch ? (
+          <Switch
+            value={switchValue}
+            onValueChange={onSwitchChange}
+            trackColor={{ false: '#E5E5EA', true: '#667eea' }}
+            thumbColor="#FFFFFF"
+            style={styles.switch}
+          />
+        ) : rightElement ? (
+          rightElement
+        ) : value ? (
+          <Text style={styles.settingValue}>{value}</Text>
+        ) : (
+          <Ionicons name="chevron-forward" size={20} color="#C7C7CC" />
+        )}
+      </View>
+    </TouchableOpacity>
   );
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Settings</Text>
-          <Text style={styles.subtitle}>Manage your journal and privacy</Text>
-        </View>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="chevron-back" size={24} color="#667eea" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Settings</Text>
+        <View style={styles.headerSpacer} />
+      </View>
 
-        <View className="section" style={styles.section}>
-          <Text style={styles.sectionTitle}>About</Text>
-          <View style={styles.infoCard}>
-            <Text style={styles.appName}>Vida Journal</Text>
-            <Text style={styles.version}>Version 1.0.0</Text>
-            <Text style={styles.description}>Your private, secure journaling companion. All entries are encrypted and stored only on your device.</Text>
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        {/* Profile Section */}
+        <LinearGradient
+          colors={['#667eea', '#764ba2']}
+          style={styles.profileSection}
+        >
+          <View style={styles.profileAvatar}>
+            <Ionicons name="person" size={32} color="white" />
           </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Data & Privacy</Text>
-          <View style={styles.statsCard}>
-            <View style={styles.stat}><Text style={styles.statNumber}>{entries.length}</Text><Text style={styles.statLabel}>Entries</Text></View>
-            <View style={styles.stat}><Text style={styles.statNumber}>100%</Text><Text style={styles.statLabel}>Encrypted</Text></View>
-            <View style={styles.stat}><Text style={styles.statNumber}>0</Text><Text style={styles.statLabel}>Cloud Synced</Text></View>
+          <View style={styles.profileInfo}>
+            <Text style={styles.profileName}>Journal User</Text>
+            <Text style={styles.profileSubtitle}>Personal Growth Journey</Text>
           </View>
+        </LinearGradient>
+
+        {/* AI & Analysis Settings */}
+        <SettingSection title="AI & Analysis">
+          <SettingRow
+            icon="sparkles"
+            title="AI Analysis"
+            subtitle="Automatically analyze entries with AI insights"
+            showSwitch
+            switchValue={appState.analysisEnabled}
+            onSwitchChange={onToggleAnalysis}
+          />
+          <SettingRow
+            icon="eye"
+            title="Demo Data"
+            subtitle="Show example data for exploration"
+            showSwitch
+            switchValue={appState.showDummyData}
+            onSwitchChange={onToggleDummyData}
+          />
+          <SettingRow
+            icon="analytics"
+            title="Usage Analytics"
+            subtitle="Help improve the app with anonymous usage data"
+            showSwitch
+            switchValue={localSettings.analytics}
+            onSwitchChange={() => handleToggle('analytics')}
+          />
+        </SettingSection>
+
+        {/* Interface Settings */}
+        <SettingSection title="Interface">
+          <SettingRow
+            icon="hand-left"
+            title="Swipe Gestures"
+            subtitle="Navigate between views with swipe gestures"
+            showSwitch
+            switchValue={appState.swipeGesturesEnabled}
+            onSwitchChange={onToggleSwipeGestures}
+          />
+          <SettingRow
+            icon="moon"
+            title="Dark Mode"
+            subtitle="Use dark theme throughout the app"
+            showSwitch
+            switchValue={localSettings.darkMode}
+            onSwitchChange={() => handleToggle('darkMode')}
+          />
+          <SettingRow
+            icon="notifications"
+            title="Notifications"
+            subtitle="Daily reminders to journal"
+            showSwitch
+            switchValue={localSettings.notifications}
+            onSwitchChange={() => handleToggle('notifications')}
+          />
+        </SettingSection>
+
+        {/* Data & Privacy */}
+        <SettingSection title="Data & Privacy">
+          <SettingRow
+            icon="cloud-upload"
+            title="Backup & Sync"
+            subtitle="Securely backup your journal entries"
+            showSwitch
+            switchValue={localSettings.backupEnabled}
+            onSwitchChange={() => handleToggle('backupEnabled')}
+          />
+          <SettingRow
+            icon="download"
+            title="Export Data"
+            subtitle="Download your journal entries"
+            onPress={handleExportData}
+          />
+          <SettingRow
+            icon="trash"
+            title="Clear All Data"
+            subtitle="Permanently delete all entries and settings"
+            onPress={handleClearData}
+            rightElement={
+              <Ionicons name="warning" size={20} color="#FF3B30" />
+            }
+          />
+        </SettingSection>
+
+        {/* About & Support */}
+        <SettingSection title="About & Support">
+          <SettingRow
+            icon="help-circle"
+            title="Help & FAQ"
+            subtitle="Get answers to common questions"
+            onPress={() => Alert.alert('Help', 'Help documentation coming soon!')}
+          />
+          <SettingRow
+            icon="mail"
+            title="Contact Support"
+            subtitle="Get help with issues or feedback"
+            onPress={handleContactSupport}
+          />
+          <SettingRow
+            icon="star"
+            title="Rate the App"
+            subtitle="Share your experience on the App Store"
+            onPress={() => Alert.alert('Rate App', 'App Store rating coming soon!')}
+          />
+          <SettingRow
+            icon="share"
+            title="Share with Friends"
+            subtitle="Tell others about this journaling app"
+            onPress={() => Share.share({
+              message: 'Check out this amazing journaling app with AI insights!',
+              title: 'AI Journal App',
+            })}
+          />
+        </SettingSection>
+
+        {/* Legal */}
+        <SettingSection title="Legal">
+          <SettingRow
+            icon="shield-checkmark"
+            title="Privacy Policy"
+            subtitle="How we protect and use your data"
+            onPress={openPrivacyPolicy}
+          />
+          <SettingRow
+            icon="document-text"
+            title="Terms of Service"
+            subtitle="App usage terms and conditions"
+            onPress={openTermsOfService}
+          />
+        </SettingSection>
+
+        {/* App Info */}
+        <View style={styles.appInfo}>
+          <Text style={styles.appInfoText}>AI Journal App</Text>
+          <Text style={styles.appInfoVersion}>Version 1.0.0</Text>
+          <Text style={styles.appInfoCopyright}>© 2024 Your Company</Text>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Support</Text>
-          <SettingItem icon="shield-checkmark" title="Privacy Policy" subtitle="How we protect your data" onPress={handlePrivacyPolicy} />
-          <SettingItem icon="help-circle" title="Support" subtitle="Get help or send feedback" onPress={handleSupport} />
-        </View>
-
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, styles.dangerTitle]}>Danger Zone</Text>
-          <SettingItem icon="trash" title="Clear All Data" subtitle={`Delete all ${entries.length} entries permanently`} onPress={handleClearData} variant="danger" />
-        </View>
+        {/* Bottom Padding */}
+        <View style={styles.bottomPadding} />
       </ScrollView>
     </SafeAreaView>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.background },
-  scrollView: { flex: 1, paddingHorizontal: theme.spacing.md },
-  header: { paddingTop: theme.spacing.md, paddingBottom: theme.spacing.lg },
-  title: { ...theme.typography.h1, color: theme.colors.text, marginBottom: theme.spacing.xs },
-  subtitle: { ...theme.typography.body, color: theme.colors.textSecondary },
-  section: { marginBottom: theme.spacing.xl },
-  sectionTitle: { ...theme.typography.h3, color: theme.colors.text, marginBottom: theme.spacing.md },
-  dangerTitle: { color: theme.colors.danger },
-  infoCard: { backgroundColor: theme.colors.surface, padding: theme.spacing.lg, borderRadius: theme.borderRadius.md, borderWidth: 1, borderColor: theme.colors.border },
-  appName: { ...theme.typography.h2, color: theme.colors.text, marginBottom: theme.spacing.xs },
-  version: { ...theme.typography.caption, color: theme.colors.textSecondary, marginBottom: theme.spacing.md },
-  description: { ...theme.typography.body, color: theme.colors.textSecondary, lineHeight: 22 },
-  statsCard: { flexDirection: 'row', backgroundColor: theme.colors.surface, padding: theme.spacing.lg, borderRadius: theme.borderRadius.md, borderWidth: 1, borderColor: theme.colors.border, justifyContent: 'space-around' },
-  stat: { alignItems: 'center' },
-  statNumber: { ...theme.typography.h2, color: theme.colors.primary, marginBottom: theme.spacing.xs },
-  statLabel: { ...theme.typography.caption, color: theme.colors.textSecondary },
-  settingItem: { backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.md, marginBottom: theme.spacing.sm, borderWidth: 1, borderColor: theme.colors.border },
-  dangerItem: { borderColor: theme.colors.danger + '40', backgroundColor: theme.colors.danger + '05' },
-  settingContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: theme.spacing.md, width: '100%' },
-  settingLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  settingText: { marginLeft: theme.spacing.md, flex: 1 },
-  settingTitle: { ...theme.typography.body, color: theme.colors.text, fontWeight: '600' },
-  settingSubtitle: { ...theme.typography.caption, color: theme.colors.textSecondary, marginTop: 2 },
-  dangerText: { color: theme.colors.danger },
+  container: {
+    flex: 1,
+    backgroundColor: '#FAFAFA',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1d1d1f',
+    flex: 1,
+    textAlign: 'center',
+    marginRight: 40, // Offset for back button
+  },
+  headerSpacer: {
+    width: 40,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  profileSection: {
+    margin: 20,
+    borderRadius: 20,
+    padding: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  profileAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  profileInfo: {
+    flex: 1,
+  },
+  profileName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: 'white',
+    marginBottom: 4,
+  },
+  profileSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  section: {
+    marginHorizontal: 20,
+    marginBottom: 32,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1d1d1f',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  sectionContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
+  },
+  settingLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  settingIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  settingText: {
+    flex: 1,
+  },
+  settingTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1d1d1f',
+    marginBottom: 2,
+  },
+  settingSubtitle: {
+    fontSize: 13,
+    color: '#86868b',
+    lineHeight: 18,
+  },
+  settingRight: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settingValue: {
+    fontSize: 15,
+    color: '#86868b',
+    marginRight: 8,
+  },
+  switch: {
+    transform: [{ scaleX: 0.9 }, { scaleY: 0.9 }],
+  },
+  appInfo: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    marginHorizontal: 20,
+  },
+  appInfoText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1d1d1f',
+    marginBottom: 4,
+  },
+  appInfoVersion: {
+    fontSize: 14,
+    color: '#86868b',
+    marginBottom: 8,
+  },
+  appInfoCopyright: {
+    fontSize: 12,
+    color: '#C7C7CC',
+  },
+  bottomPadding: {
+    height: 40,
+  },
 });
+
+export default SettingsScreen;

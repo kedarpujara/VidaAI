@@ -11,6 +11,8 @@ import {
   Dimensions,
   Modal,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -33,11 +35,23 @@ const { width } = Dimensions.get('window');
 interface CreateJournalEntryScreenProps {
   onEntryAdded: (entry: Entry) => void;
   onRemoveDummyData: () => void;
+  analysisEnabled?: boolean;
+  onToggleAnalysis?: () => void;
+  onBatchAnalyze?: () => void;
+  isAnalyzing?: boolean;
+  isRecording?: boolean;
+  onRecordingStateChange?: (recording: boolean) => void;
 }
 
 export default function CreateJournalEntryScreen({ 
   onEntryAdded, 
-  onRemoveDummyData 
+  onRemoveDummyData,
+  analysisEnabled = true,
+  onToggleAnalysis,
+  onBatchAnalyze,
+  isAnalyzing = false,
+  isRecording: externalIsRecording = false,
+  onRecordingStateChange,
 }: CreateJournalEntryScreenProps) {
   // State
   const [entryText, setEntryText] = useState('');
@@ -52,7 +66,7 @@ export default function CreateJournalEntryScreen({
   const [hasAudioPermission, setHasAudioPermission] = useState(false);
   
   // AI Analysis State
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isAnalyzingLocal, setIsAnalyzingLocal] = useState(false);
   
   // Photo State
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
@@ -94,6 +108,13 @@ export default function CreateJournalEntryScreen({
       }
     };
   }, []);
+
+  // Sync with external recording state
+  useEffect(() => {
+    if (onRecordingStateChange) {
+      onRecordingStateChange(isRecording);
+    }
+  }, [isRecording, onRecordingStateChange]);
 
   const initializePermissions = async () => {
     await requestAudioPermissions();
@@ -518,6 +539,9 @@ export default function CreateJournalEntryScreen({
     return [...new Set([...foundTags, ...activityTags])].slice(0, 5);
   };
 
+  // Check if save should be disabled
+  const isSaveDisabled = isRecording || isAnalyzing || isAnalyzingLocal || (!entryText.trim());
+
   const saveEntry = async () => {
     // Hard requirement: Must have actual text content (not just whitespace)
     if (!entryText.trim()) {
@@ -527,10 +551,10 @@ export default function CreateJournalEntryScreen({
 
     try {
       setIsSaving(true);
-      setIsAnalyzing(true);
+      setIsAnalyzingLocal(true);
       
       let aiAnalysis = null;
-      if (entryText.trim()) {
+      if (entryText.trim() && analysisEnabled) {
         try {
           aiAnalysis = await AIAnalysisService.analyzeJournalEntry(entryText);
         } catch (analysisError) {
@@ -538,7 +562,7 @@ export default function CreateJournalEntryScreen({
         }
       }
       
-      setIsAnalyzing(false);
+      setIsAnalyzingLocal(false);
       
       const newEntry: Entry = {
         id: Date.now().toString(),
@@ -575,7 +599,7 @@ export default function CreateJournalEntryScreen({
       Alert.alert('Error', 'Failed to save entry.');
     } finally {
       setIsSaving(false);
-      setIsAnalyzing(false);
+      setIsAnalyzingLocal(false);
     }
   };
 
@@ -610,7 +634,7 @@ export default function CreateJournalEntryScreen({
         style={[styles.activityButton, isSelected && styles.activityButtonSelected]}
         onPress={() => {
           console.log('Activity button pressed:', activity);
-          openActivityModal(activity);
+          setShowExtrasModal(true);
         }}
       >
         <Ionicons 
@@ -751,24 +775,18 @@ export default function CreateJournalEntryScreen({
             </Pressable>
           </View>
 
-          {/* Activity Buttons */}
-          {/* Removed - now handled by Extras modal */}
-
-          {/* Transcription Area - REMOVED */}
-          {/* Now using the main text button for all text display */}
-
           {/* Save Button */}
           {entryText.trim() && (
             <Pressable 
-              style={[styles.saveButton, (isSaving || isAnalyzing) && styles.saveButtonDisabled]} 
+              style={[styles.saveButton, isSaveDisabled && styles.saveButtonDisabled]} 
               onPress={saveEntry}
-              disabled={isSaving || isAnalyzing}
+              disabled={isSaveDisabled}
             >
-              {isSaving || isAnalyzing ? (
+              {isSaving || isAnalyzingLocal ? (
                 <View style={styles.savingContainer}>
                   <ActivityIndicator color="#fff" size="small" />
                   <Text style={styles.saveButtonText}>
-                    {isAnalyzing ? 'Analyzing...' : 'Saving...'}
+                    {isRecording ? 'Recording...' : (isAnalyzingLocal || isAnalyzing) ? 'Analyzing...' : 'Saving...'}
                   </Text>
                 </View>
               ) : (
@@ -782,14 +800,17 @@ export default function CreateJournalEntryScreen({
         </View>
       </ScrollView>
 
-      {/* Text Modal */}
+      {/* Text Modal - FIXED SCROLLABLE BOTTOM SHEET */}
       <Modal
         visible={showTextModal}
         animationType="slide"
         transparent={true}
         onRequestClose={() => setShowTextModal(false)}
       >
-        <View style={styles.textModalOverlay}>
+        <KeyboardAvoidingView 
+          style={styles.textModalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <View style={styles.textModalContainer}>
             <View style={styles.bottomSheetHandle} />
             
@@ -803,17 +824,25 @@ export default function CreateJournalEntryScreen({
               </Pressable>
             </View>
             
-            <TextInput
-              style={styles.textModalInput}
-              value={entryText}
-              onChangeText={setEntryText}
-              placeholder="What's on your mind today?"
-              placeholderTextColor="#86868b"
-              multiline
-              autoFocus
-            />
+            <ScrollView 
+              style={styles.textModalScrollView}
+              contentContainerStyle={styles.textModalScrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <TextInput
+                style={styles.textModalInput}
+                value={entryText}
+                onChangeText={setEntryText}
+                placeholder="What's on your mind today?"
+                placeholderTextColor="#86868b"
+                multiline
+                autoFocus
+                textAlignVertical="top"
+              />
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Upload Modal */}
@@ -880,6 +909,8 @@ export default function CreateJournalEntryScreen({
           </View>
         </View>
       </Modal>
+
+      {/* Extras Modal */}
       <Modal
         visible={showExtrasModal}
         animationType="slide"
@@ -1109,7 +1140,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   
-  // Text Modal Styles
+  // Text Modal Styles - FIXED FOR SCROLLING
   textModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
@@ -1119,7 +1150,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#fafafa',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    paddingTop: 8,
     marginTop: 60,
   },
   textModalHeader: {
@@ -1130,7 +1160,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0, 0, 0, 0.05)',
-    marginBottom: 8,
   },
   textModalCancel: {
     fontSize: 16,
@@ -1148,14 +1177,20 @@ const styles = StyleSheet.create({
     color: '#007AFF',
     fontWeight: '600',
   },
-  textModalInput: {
+  textModalScrollView: {
     flex: 1,
+  },
+  textModalScrollContent: {
+    flexGrow: 1,
+    paddingBottom: 40,
+  },
+  textModalInput: {
     paddingHorizontal: 24,
     paddingVertical: 16,
     fontSize: 16,
     color: '#1d1d1f',
     lineHeight: 24,
-    textAlignVertical: 'top',
+    minHeight: 200,
   },
   contentActions: {
     flexDirection: 'row',
@@ -1226,40 +1261,6 @@ const styles = StyleSheet.create({
     shadowColor: '#007AFF',
     shadowOpacity: 0.3,
   },
-  transcriptionArea: {
-    width: '100%',
-    maxWidth: 327,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 32,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 32,
-    elevation: 8,
-  },
-  transcriptionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  transcriptionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1d1d1f',
-  },
-  editButton: {
-    fontSize: 14,
-    color: '#007AFF',
-    fontWeight: '500',
-  },
-  transcriptionText: {
-    fontSize: 16,
-    color: '#1d1d1f',
-    lineHeight: 24,
-  },
   saveButton: {
     width: '100%',
     maxWidth: 327,
@@ -1280,6 +1281,7 @@ const styles = StyleSheet.create({
   saveButtonDisabled: {
     backgroundColor: '#86868b',
     shadowColor: '#86868b',
+    opacity: 0.6,
   },
   savingContainer: {
     flexDirection: 'row',
@@ -1315,116 +1317,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1d1d1f',
   },
-  modalDone: {
-    fontSize: 16,
-    color: '#007AFF',
-    fontWeight: '600',
-  },
   modalSpacer: {
     width: 50,
-  },
-  modalTextInput: {
-    flex: 1,
-    padding: 24,
-    fontSize: 16,
-    color: '#1d1d1f',
-    textAlignVertical: 'top',
-    lineHeight: 24,
-  },
-  photoOptions: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 40,
-  },
-  photoOption: {
-    alignItems: 'center',
-    gap: 16,
-    padding: 32,
-    borderRadius: 16,
-    backgroundColor: '#f2f2f7',
-    width: 200,
-  },
-  photoOptionText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#007AFF',
-  },
-  
-  // New Photo Modal Styles
-  photoModalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  photoModalBackdrop: {
-    flex: 1,
-  },
-  photoModalContainer: {
-    backgroundColor: '#fafafa',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingTop: 8,
-    maxHeight: '50%',
-  },
-  photoModalHandle: {
-    width: 36,
-    height: 4,
-    backgroundColor: '#c6c6c8',
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: 20,
-  },
-  photoModalHeader: {
-    paddingHorizontal: 24,
-    marginBottom: 24,
-  },
-  photoModalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1d1d1f',
-    letterSpacing: -0.3,
-    textAlign: 'center',
-  },
-  photoModalContent: {
-    flexDirection: 'row',
-    paddingHorizontal: 24,
-    gap: 16,
-  },
-  photoModalPadding: {
-    height: 32,
-  },
-  photoOptionsCompact: {
-    flexDirection: 'row',
-    gap: 16,
-    marginBottom: 32,
-  },
-  photoOptionCompact: {
-    flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
-    gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    elevation: 4,
-  },
-  photoOptionIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0, 122, 255, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  photoOptionTextCompact: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1d1d1f',
-    textAlign: 'center',
   },
   
   // Reusable Bottom Sheet Styles
@@ -1480,11 +1374,6 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 4,
   },
-  bottomSheetOptionSelected: {
-    backgroundColor: '#007AFF',
-    shadowColor: '#007AFF',
-    shadowOpacity: 0.3,
-  },
   bottomSheetOptionIcon: {
     width: 44,
     height: 44,
@@ -1493,17 +1382,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  bottomSheetOptionIconSelected: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-  },
   bottomSheetOptionText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#1d1d1f',
     textAlign: 'center',
-  },
-  bottomSheetOptionTextSelected: {
-    color: 'white',
   },
   bottomSheetPadding: {
     height: 32,
@@ -1665,26 +1548,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
-  },
-  selectedPhotoContainer: {
-    alignItems: 'center',
-    padding: 24,
-  },
-  selectedPhoto: {
-    width: 200,
-    height: 150,
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  removePhotoButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#ff3b30',
-  },
-  removePhotoText: {
-    color: '#fff',
-    fontWeight: '500',
   },
   comingSoon: {
     textAlign: 'center',
