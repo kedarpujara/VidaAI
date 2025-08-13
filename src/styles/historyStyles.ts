@@ -1,5 +1,6 @@
 import { StyleSheet } from 'react-native';
 
+// Base styles that should be imported from your existing historyStyles
 export const historyStyles = StyleSheet.create({
   container: {
     flex: 1,
@@ -284,6 +285,11 @@ export const weeklyStyles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
   },
+  entryCountText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
   moodChart: {
     height: 60,
     backgroundColor: '#F8F8FA',
@@ -521,6 +527,9 @@ export const monthlyStyles = StyleSheet.create({
     color: '#3C3C43',
     lineHeight: 20,
     flex: 1,
+  },
+  highlightEmoji: {
+    fontSize: 16,
   },
   aiMonthSummaryCard: {
     backgroundColor: 'rgba(102, 126, 234, 0.05)',

@@ -1,18 +1,12 @@
 import Constants from 'expo-constants';
-import { 
-  getCachedSummary, 
-  setCachedSummary, 
-  generateEntriesHash,
-  WEEKLY_CACHE_KEY,
-  MONTHLY_CACHE_KEY 
-} from './cacheService';
+import { generateEntriesHash, getCachedSummary, setCachedSummary, WEEKLY_CACHE_KEY, MONTHLY_CACHE_KEY } from './cacheService';
 
 const OPENAI_API_KEY = Constants.expoConfig?.extra?.openaiApiKey || process.env.EXPO_PUBLIC_OPENAI_API_KEY;
 
 export const generateOpenAISummary = async (
-  entries: any[], 
-  period: 'week' | 'month', 
-  startDate?: Date, 
+  entries: any[],
+  period: 'week' | 'month',
+  startDate?: Date,
   endDate?: Date,
   cacheId?: string
 ): Promise<string> => {
@@ -41,6 +35,7 @@ export const generateOpenAISummary = async (
   // Prepare data for analysis
   const entryTexts = entries.map(entry => entry.text || entry.content || '').join('\n\n');
   const allTags = entries.flatMap(entry => entry.tags || []);
+  const emotions = entries.flatMap(entry => entry.emotions || []);
   const moods = entries.map(entry => entry.mood?.score || 7);
   const avgMood = moods.reduce((sum, mood) => sum + mood, 0) / moods.length;
 
@@ -54,7 +49,7 @@ export const generateOpenAISummary = async (
     .slice(0, 5)
     .map(([tag]) => tag);
 
-  const dateRange = period === 'week' 
+  const dateRange = period === 'week'
     ? `${startDate?.toLocaleDateString()} - ${endDate?.toLocaleDateString()}`
     : `${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
 
@@ -127,20 +122,20 @@ Return only valid JSON, no additional text.
     // Clean and parse the JSON response
     const cleanedText = analysisText.replace(/```json\n?|\n?```/g, '').trim();
     const analysis = JSON.parse(cleanedText);
-    
+
     const summary = analysis.summary || `Insightful ${period} of journaling with ${entries.length} entries.`;
-    
+
     // Cache the summary
     await setCachedSummary(cacheKey, id, summary, entriesHash);
-    
+
     return summary;
   } catch (error) {
     console.error('OpenAI summary failed:', error);
     const fallbackSummary = `This ${period} included ${entries.length} journal entries with an average mood of ${avgMood.toFixed(1)}/10. Key themes: ${topTags.slice(0, 3).join(', ')}.`;
-    
-    // Cache the fallback summary too
+
+    // Cache the fallback summary too (shorter expiry)
     await setCachedSummary(cacheKey, id, fallbackSummary, entriesHash);
-    
+
     return fallbackSummary;
   }
 };

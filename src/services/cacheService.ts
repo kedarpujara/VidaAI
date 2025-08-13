@@ -1,24 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { CachedSummary } from '../types/history';
 
 // Cache storage keys
 export const WEEKLY_CACHE_KEY = '@weekly_summaries_cache';
 export const MONTHLY_CACHE_KEY = '@monthly_summaries_cache';
 export const CACHE_EXPIRY_HOURS = 24; // Cache expires after 24 hours
 
-export interface CachedSummary {
-  id: string;
-  summary: string;
-  timestamp: number;
-  entriesHash: string; // Hash of entry IDs to detect changes
-}
-
-// Generate hash from entries to detect changes
 export const generateEntriesHash = (entries: any[]): string => {
+  // Create a hash from entry IDs and content to detect changes
   const entriesString = entries
     .map(e => `${e.id}-${e.date}-${(e.text || e.content || '').length}`)
     .sort()
     .join('|');
-  
+
   // Simple hash function
   let hash = 0;
   for (let i = 0; i < entriesString.length; i++) {
@@ -29,11 +23,7 @@ export const generateEntriesHash = (entries: any[]): string => {
   return Math.abs(hash).toString(36);
 };
 
-export const getCachedSummary = async (
-  cacheKey: string, 
-  id: string, 
-  entriesHash: string
-): Promise<string | null> => {
+export const getCachedSummary = async (cacheKey: string, id: string, entriesHash: string): Promise<string | null> => {
   try {
     const cached = await AsyncStorage.getItem(cacheKey);
     if (!cached) return null;
@@ -70,12 +60,7 @@ export const getCachedSummary = async (
   }
 };
 
-export const setCachedSummary = async (
-  cacheKey: string, 
-  id: string, 
-  summary: string, 
-  entriesHash: string
-): Promise<void> => {
+export const setCachedSummary = async (cacheKey: string, id: string, summary: string, entriesHash: string): Promise<void> => {
   try {
     const cached = await AsyncStorage.getItem(cacheKey);
     const cacheData: Record<string, CachedSummary> = cached ? JSON.parse(cached) : {};
